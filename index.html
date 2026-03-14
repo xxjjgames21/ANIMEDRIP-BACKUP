@@ -63,6 +63,12 @@ background-position:center;
 display:flex;
 align-items:flex-end;
 padding:20px;
+cursor:pointer;
+transition:0.3s;
+}
+
+#hero:hover{
+filter:brightness(1.1);
 }
 
 #hero h2{
@@ -193,6 +199,9 @@ const search=document.getElementById("search")
 let page=1
 let query=""
 let isLoading=false
+let heroAnimeId=null
+
+/* LOAD ANIME */
 
 async function loadAnime(){
 
@@ -209,19 +218,14 @@ url=`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&page=${page}`
 }
 
 const res=await fetch(url)
-
 if(!res.ok) throw new Error("Network error")
 
 const data=await res.json()
-
-if(!data.data || data.data.length===0){
-isLoading=false
-loading.style.display="none"
-return
-}
+if(!data.data) return
 
 if(page===1){
 grid.innerHTML=""
+heroAnimeId=data.data[0].mal_id
 hero.style.backgroundImage=`url(${data.data[0].images.jpg.large_image_url})`
 heroTitle.innerText=data.data[0].title
 }
@@ -245,13 +249,15 @@ grid.appendChild(card)
 page++
 
 }catch(err){
-console.log("Error:",err)
+console.log(err)
 }
 
 loading.style.display="none"
 isLoading=false
 
 }
+
+/* OPEN ANIME */
 
 async function openAnime(id){
 
@@ -270,6 +276,7 @@ modalContent.innerHTML=`
 <p>${anime.synopsis||"No description available."}</p>
 
 <h3>Trailer</h3>
+
 ${anime.trailer?.embed_url ?
 `<iframe width="100%" height="315"
 src="${anime.trailer.embed_url}"
@@ -277,19 +284,43 @@ frameborder="0" allowfullscreen></iframe>`
 :"No trailer available."}
 `
 
-}catch(err){
-modalContent.innerHTML="Failed to load anime."
+}catch{
+modalContent.innerHTML="Failed to load."
 }
 
 }
+
+/* RESET WHEN CLICKING BANNER */
+
+hero.style.cursor="pointer"
+
+hero.addEventListener("click",()=>{
+query=""
+page=1
+search.value=""
+grid.innerHTML=""
+loadAnime()
+})
+
+/* THEME */
+
+function toggleTheme(){
+document.body.classList.toggle("light")
+}
+
+/* CLOSE MODAL */
 
 function closeModal(){
 modal.style.display="none"
 }
 
-function toggleTheme(){
-document.body.classList.toggle("light")
+window.onclick=function(e){
+if(e.target===modal){
+modal.style.display="none"
 }
+}
+
+/* INFINITE SCROLL */
 
 window.addEventListener("scroll",()=>{
 if(isLoading) return
@@ -299,15 +330,20 @@ loadAnime()
 }
 })
 
+/* SEARCH */
+
 let timeout
 search.addEventListener("input",()=>{
 clearTimeout(timeout)
 timeout=setTimeout(()=>{
 page=1
 query=search.value.trim()
+grid.innerHTML=""
 loadAnime()
 },400)
 })
+
+/* START */
 
 loadAnime()
 
