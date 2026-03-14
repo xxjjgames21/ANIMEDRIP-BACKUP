@@ -36,6 +36,8 @@ position:sticky;
 top:0;
 z-index:20;
 display:flex;
+flex-wrap:wrap;
+gap:10px;
 justify-content:space-between;
 align-items:center;
 padding:15px;
@@ -55,13 +57,12 @@ cursor:pointer;
 /* HERO */
 
 #hero{
-height:65vh;
+height:60vh;
 background-size:cover;
 background-position:center;
 display:flex;
 align-items:flex-end;
-padding:30px;
-transition:0.5s;
+padding:20px;
 }
 
 #hero h2{
@@ -78,7 +79,7 @@ padding:20px;
 
 #animeGrid{
 display:grid;
-grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
 gap:15px;
 }
 
@@ -87,12 +88,18 @@ background:var(--card);
 border-radius:10px;
 overflow:hidden;
 cursor:pointer;
-transition:0.2s;
+transition:0.3s;
+animation:fadeIn 0.3s ease;
 }
 
 .card:hover{transform:scale(1.05);}
 
 .card img{width:100%;}
+
+@keyframes fadeIn{
+from{opacity:0;transform:translateY(10px);}
+to{opacity:1;transform:translateY(0);}
+}
 
 /* MODAL */
 
@@ -118,7 +125,20 @@ border-radius:10px;
 
 .close{float:right;cursor:pointer;}
 
-/* LOADING */
+/* SKELETON */
+
+.skeleton{
+height:220px;
+border-radius:10px;
+background:linear-gradient(90deg,#1f2937 25%,#374151 50%,#1f2937 75%);
+background-size:200% 100%;
+animation:loading 1.2s infinite;
+}
+
+@keyframes loading{
+0%{background-position:200% 0;}
+100%{background-position:-200% 0;}
+}
 
 #loading{
 text-align:center;
@@ -126,10 +146,9 @@ padding:20px;
 display:none;
 }
 
-video{
-width:100%;
-margin-top:10px;
-border-radius:10px;
+@media(max-width:600px){
+#hero{height:40vh;}
+.card:hover{transform:none;}
 }
 
 </style>
@@ -148,8 +167,10 @@ border-radius:10px;
 </div>
 
 <section>
+
 <div id="animeGrid"></div>
 <div id="loading">Loading...</div>
+
 </section>
 
 <div class="modal" id="modal">
@@ -171,22 +192,36 @@ const search=document.getElementById("search")
 
 let page=1
 let query=""
-
-let favorites=JSON.parse(localStorage.getItem("favorites")||"[]")
-let continueData=JSON.parse(localStorage.getItem("continue")||"{}")
+let isLoading=false
 
 async function loadAnime(){
 
+if(isLoading) return
+isLoading=true
 loading.style.display="block"
 
-let url=query
-?`https://api.jikan.moe/v4/anime?q=${query}&page=${page}`
-:`https://api.jikan.moe/v4/top/anime?page=${page}`
+try{
+
+let url=`https://api.jikan.moe/v4/top/anime?page=${page}`
+
+if(query){
+url=`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&page=${page}`
+}
 
 const res=await fetch(url)
+
+if(!res.ok) throw new Error("Network error")
+
 const data=await res.json()
 
-if(page===1 && data.data.length>0){
+if(!data.data || data.data.length===0){
+isLoading=false
+loading.style.display="none"
+return
+}
+
+if(page===1){
+grid.innerHTML=""
 hero.style.backgroundImage=`url(${data.data[0].images.jpg.large_image_url})`
 heroTitle.innerText=data.data[0].title
 }
@@ -198,57 +233,53 @@ card.className="card"
 
 card.innerHTML=`
 <img src="${anime.images.jpg.image_url}">
-<p style="padding:5px">${anime.title}</p>
+<p style="padding:6px">${anime.title}</p>
 `
 
-card.onclick=()=>openAnime(anime.mal_id,anime.title)
+card.onclick=()=>openAnime(anime.mal_id)
 
 grid.appendChild(card)
 
 })
 
-loading.style.display="none"
 page++
+
+}catch(err){
+console.log("Error:",err)
+}
+
+loading.style.display="none"
+isLoading=false
 
 }
 
-async function openAnime(id,title){
+async function openAnime(id){
 
 modal.style.display="flex"
+modalContent.innerHTML="Loading..."
+
+try{
 
 const res=await fetch(`https://api.jikan.moe/v4/anime/${id}`)
 const data=await res.json()
 const anime=data.data
 
-localStorage.setItem("continue",JSON.stringify({id,title}))
-
-let episodesHTML=""
-
-try{
-const eps=await fetch(`https://api.jikan.moe/v4/anime/${id}/episodes`)
-const epData=await eps.json()
-
-epData.data.slice(0,12).forEach(ep=>{
-episodesHTML+=`<button onclick="alert('Episode ${ep.mal_id} selected')">EP ${ep.mal_id}</button> `
-})
-
-}catch{}
-
 modalContent.innerHTML=`
 <h2>${anime.title}</h2>
 <img src="${anime.images.jpg.large_image_url}" width="200">
-<p>${anime.synopsis||""}</p>
-
-<h3>Episodes</h3>
-${episodesHTML||"No episode data"}
+<p>${anime.synopsis||"No description available."}</p>
 
 <h3>Trailer</h3>
-${anime.trailer?.embed_url ? `
-<iframe width="100%" height="315"
+${anime.trailer?.embed_url ?
+`<iframe width="100%" height="315"
 src="${anime.trailer.embed_url}"
-frameborder="0" allowfullscreen></iframe>
-`:"No trailer"}
+frameborder="0" allowfullscreen></iframe>`
+:"No trailer available."}
 `
+
+}catch(err){
+modalContent.innerHTML="Failed to load anime."
+}
 
 }
 
@@ -261,16 +292,21 @@ document.body.classList.toggle("light")
 }
 
 window.addEventListener("scroll",()=>{
-if(window.innerHeight+window.scrollY>=document.body.offsetHeight-500){
+if(isLoading) return
+
+if(window.innerHeight+window.scrollY>=document.body.offsetHeight-400){
 loadAnime()
 }
 })
 
+let timeout
 search.addEventListener("input",()=>{
-grid.innerHTML=""
+clearTimeout(timeout)
+timeout=setTimeout(()=>{
 page=1
-query=search.value
+query=search.value.trim()
 loadAnime()
+},400)
 })
 
 loadAnime()
